@@ -193,16 +193,11 @@ void CToplevelExportProtocolManager::captureToplevel(wl_client* client, wl_resou
         return;
     }
 
-    if (PMONITOR->output->allocator && (PMONITOR->output->allocator->buffer_caps & WLR_BUFFER_CAP_DMABUF)) {
-        PFRAME->dmabufFormat = PMONITOR->output->render_format;
-    } else {
-        PFRAME->dmabufFormat = DRM_FORMAT_INVALID;
-    }
+    PFRAME->dmabufFormat = PMONITOR->output->state->drmFormat;
 
     PFRAME->box = {0, 0, (int)(pWindow->m_vRealSize.value().x * PMONITOR->scale), (int)(pWindow->m_vRealSize.value().y * PMONITOR->scale)};
-    int ow, oh;
-    wlr_output_effective_resolution(PMONITOR->output, &ow, &oh);
-    PFRAME->box.transform(wlTransformToHyprutils(PMONITOR->transform), ow, oh).round();
+
+    PFRAME->box.transform(wlTransformToHyprutils(PMONITOR->transform), PMONITOR->vecTransformedSize.x, PMONITOR->vecTransformedSize.y).round();
 
     PFRAME->shmStride = FormatUtils::minStride(PSHMINFO, PFRAME->box.w);
 
@@ -293,6 +288,8 @@ void CToplevelExportProtocolManager::onOutputCommit(CMonitor* pMonitor, wlr_outp
     if (m_vFramesAwaitingWrite.empty())
         return; // nothing to share
 
+    return; //FIXME:
+/*
     const auto                     PMONITOR = g_pCompositor->getMonitorFromOutput(e->output);
 
     std::vector<SScreencopyFrame*> framesToRemove;
@@ -324,7 +321,7 @@ void CToplevelExportProtocolManager::onOutputCommit(CMonitor* pMonitor, wlr_outp
 
     for (auto& f : framesToRemove) {
         removeFrame(f);
-    }
+    }*/
 }
 
 void CToplevelExportProtocolManager::shareFrame(SScreencopyFrame* frame) {

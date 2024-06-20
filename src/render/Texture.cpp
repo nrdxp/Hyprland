@@ -58,7 +58,7 @@ CTexture::CTexture(wlr_texture* tex) {
     m_vSize = Vector2D((int)tex->width, (int)tex->height);
 }
 
-CTexture::CTexture(const SDMABUFAttrs& attrs, void* image) {
+CTexture::CTexture(const Aquamarine::SDMABUFAttrs& attrs, void* image) {
     if (!g_pHyprOpenGL->m_sProc.glEGLImageTargetTexture2DOES) {
         Debug::log(ERR, "Cannot create a dmabuf texture: no glEGLImageTargetTexture2DOES");
         return;
@@ -119,7 +119,7 @@ void CTexture::destroyTexture() {
     }
 
     if (m_pEglImage)
-        g_pHyprOpenGL->m_sProc.eglDestroyImageKHR(wlr_egl_get_display(g_pCompositor->m_sWLREGL), m_pEglImage);
+        g_pHyprOpenGL->m_sProc.eglDestroyImageKHR(g_pHyprOpenGL->m_pEglDisplay, m_pEglImage);
     m_pEglImage = nullptr;
 }
 

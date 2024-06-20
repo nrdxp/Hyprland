@@ -9,6 +9,8 @@
 #include <wlr/render/interface.h>
 #include <wlr/render/wlr_renderer.h>
 
+using namespace Aquamarine;
+
 // TODO: make nicer
 // this will come with the eventual rewrite of wlr_drm, etc...
 static bool wlr_drm_format_intersect(wlr_drm_format* dst, const wlr_drm_format* a, const wlr_drm_format* b) {
@@ -67,44 +69,46 @@ static const wlr_drm_format_set* wlr_renderer_get_render_formats(wlr_renderer* r
 
 static bool output_pick_format(wlr_output* output, const wlr_drm_format_set* display_formats, wlr_drm_format* format, uint32_t fmt) {
 
-    const wlr_drm_format_set* render_formats = wlr_renderer_get_render_formats(g_pCompositor->m_sWLRRenderer);
-    if (render_formats == NULL) {
-        wlr_log(WLR_ERROR, "Failed to get render formats");
-        return false;
-    }
+    return false; // FIXME:
 
-    const wlr_drm_format* render_format = wlr_drm_format_set_get(render_formats, fmt);
-    if (render_format == NULL) {
-        wlr_log(WLR_DEBUG, "Renderer doesn't support format 0x%" PRIX32, fmt);
-        return false;
-    }
+    // const wlr_drm_format_set* render_formats = wlr_renderer_get_render_formats(g_pCompositor->m_sWLRRenderer);
+    // if (render_formats == NULL) {
+    //     wlr_log(WLR_ERROR, "Failed to get render formats");
+    //     return false;
+    // }
 
-    if (display_formats != NULL) {
-        const wlr_drm_format* display_format = wlr_drm_format_set_get(display_formats, fmt);
-        if (display_format == NULL) {
-            wlr_log(WLR_DEBUG, "Output doesn't support format 0x%" PRIX32, fmt);
-            return false;
-        }
-        if (!wlr_drm_format_intersect(format, display_format, render_format)) {
-            wlr_log(WLR_DEBUG,
-                    "Failed to intersect display and render "
-                    "modifiers for format 0x%" PRIX32 " on output %s",
-                    fmt, output->name);
-            return false;
-        }
-    } else {
-        // The output can display any format
-        if (!wlr_drm_format_copy(format, render_format))
-            return false;
-    }
+    // const wlr_drm_format* render_format = wlr_drm_format_set_get(render_formats, fmt);
+    // if (render_format == NULL) {
+    //     wlr_log(WLR_DEBUG, "Renderer doesn't support format 0x%" PRIX32, fmt);
+    //     return false;
+    // }
 
-    if (format->len == 0) {
-        wlr_drm_format_finish(format);
-        wlr_log(WLR_DEBUG, "Failed to pick output format");
-        return false;
-    }
+    // if (display_formats != NULL) {
+    //     const wlr_drm_format* display_format = wlr_drm_format_set_get(display_formats, fmt);
+    //     if (display_format == NULL) {
+    //         wlr_log(WLR_DEBUG, "Output doesn't support format 0x%" PRIX32, fmt);
+    //         return false;
+    //     }
+    //     if (!wlr_drm_format_intersect(format, display_format, render_format)) {
+    //         wlr_log(WLR_DEBUG,
+    //                 "Failed to intersect display and render "
+    //                 "modifiers for format 0x%" PRIX32 " on output %s",
+    //                 fmt, output->name);
+    //         return false;
+    //     }
+    // } else {
+    //     // The output can display any format
+    //     if (!wlr_drm_format_copy(format, render_format))
+    //         return false;
+    // }
 
-    return true;
+    // if (format->len == 0) {
+    //     wlr_drm_format_finish(format);
+    //     wlr_log(WLR_DEBUG, "Failed to pick output format");
+    //     return false;
+    // }
+
+    // return true;
 }
 
 static bool output_pick_cursor_format(struct wlr_output* output, struct wlr_drm_format* format) {
@@ -198,6 +202,11 @@ void CPointerManager::unlockSoftwareForMonitor(SP<CMonitor> mon) {
 
     if (state->softwareLocks == 0)
         updateCursorBackend();
+}
+
+bool CPointerManager::softwareLockedFor(SP<CMonitor> mon) {
+    auto state = stateFor(mon);
+    return state->softwareLocks > 0 || state->hardwareFailed;
 }
 
 Vector2D CPointerManager::position() {
@@ -317,8 +326,8 @@ void CPointerManager::recheckEnteredOutputs() {
             // if we are using hw cursors, prevent
             // the cursor from being stuck at the last point.
             // if we are leaving it, move it to narnia.
-            if (!s->hardwareFailed && s->monitor->output->impl->move_cursor)
-                s->monitor->output->impl->move_cursor(s->monitor->output, -1337, -420);
+            if (!s->hardwareFailed && (s->monitor->output->getBackend()->capabilities() & IBackendImplementation::eBackendCapabilities::AQ_BACKEND_CAPABILITY_POINTER))
+                s->monitor->output->moveCursor({-1337, -420});
 
             if (!currentCursorImage.surface)
                 continue;
@@ -370,8 +379,9 @@ void CPointerManager::resetCursorImage(bool apply) {
         }
 
         if (ms->cursorFrontBuffer) {
-            if (ms->monitor->output->impl->set_cursor)
-                ms->monitor->output->impl->set_cursor(ms->monitor->output, nullptr, 0, 0);
+            // TODO:
+            // if (ms->monitor->output->impl->set_cursor)
+            //     ms->monitor->output->impl->set_cursor(ms->monitor->output, nullptr, 0, 0);
             wlr_buffer_unlock(ms->cursorFrontBuffer);
             ms->cursorFrontBuffer = nullptr;
         }
@@ -418,18 +428,18 @@ void CPointerManager::onCursorMoved() {
             continue;
 
         const auto CURSORPOS = getCursorPosForMonitor(m);
-        m->output->impl->move_cursor(m->output, CURSORPOS.x, CURSORPOS.y);
+        m->output->moveCursor(CURSORPOS);
     }
 }
 
 bool CPointerManager::attemptHardwareCursor(SP<CPointerManager::SMonitorPointerState> state) {
     auto output = state->monitor->output;
 
-    if (!output->impl->set_cursor)
+    if (!(output->getBackend()->capabilities() & IBackendImplementation::eBackendCapabilities::AQ_BACKEND_CAPABILITY_POINTER))
         return false;
 
     const auto CURSORPOS = getCursorPosForMonitor(state->monitor.lock());
-    state->monitor->output->impl->move_cursor(state->monitor->output, CURSORPOS.x, CURSORPOS.y);
+    state->monitor->output->moveCursor(CURSORPOS);
 
     auto texture = getCurrentCursorTexture();
 
@@ -460,15 +470,15 @@ bool CPointerManager::attemptHardwareCursor(SP<CPointerManager::SMonitorPointerS
 }
 
 bool CPointerManager::setHWCursorBuffer(SP<SMonitorPointerState> state, wlr_buffer* buf) {
-    if (!state->monitor->output->impl->set_cursor)
+    if (!(state->monitor->output->getBackend()->capabilities() & IBackendImplementation::eBackendCapabilities::AQ_BACKEND_CAPABILITY_POINTER))
         return false;
 
     const auto HOTSPOT = transformedHotspot(state->monitor.lock());
 
     Debug::log(TRACE, "[pointer] hw transformed hotspot for {}: {}", state->monitor->szName, HOTSPOT);
 
-    if (!state->monitor->output->impl->set_cursor(state->monitor->output, buf, HOTSPOT.x, HOTSPOT.y))
-        return false;
+    // if (!state->monitor->output->impl->set_cursor(state->monitor->output, buf, HOTSPOT.x, HOTSPOT.y))
+    //     return false;
 
     wlr_buffer_unlock(state->cursorFrontBuffer);
     state->cursorFrontBuffer = buf;
@@ -484,70 +494,73 @@ bool CPointerManager::setHWCursorBuffer(SP<SMonitorPointerState> state, wlr_buff
 wlr_buffer* CPointerManager::renderHWCursorBuffer(SP<CPointerManager::SMonitorPointerState> state, SP<CTexture> texture) {
     auto output = state->monitor->output;
 
-    int  w = currentCursorImage.size.x, h = currentCursorImage.size.y;
-    if (output->impl->get_cursor_size) {
-        output->impl->get_cursor_size(output, &w, &h);
+    // TODO:
+    return nullptr;
 
-        if (w < currentCursorImage.size.x || h < currentCursorImage.size.y) {
-            Debug::log(TRACE, "hardware cursor too big! {} > {}x{}", currentCursorImage.size, w, h);
-            return nullptr;
-        }
-    }
+    // int  w = currentCursorImage.size.x, h = currentCursorImage.size.y;
+    // if (output->impl->get_cursor_size) {
+    //     output->impl->get_cursor_size(output, &w, &h);
 
-    if (w <= 0 || h <= 0) {
-        Debug::log(TRACE, "hw cursor for output {} failed the size checks ({}x{} is invalid)", state->monitor->szName, w, h);
-        return nullptr;
-    }
+    //     if (w < currentCursorImage.size.x || h < currentCursorImage.size.y) {
+    //         Debug::log(TRACE, "hardware cursor too big! {} > {}x{}", currentCursorImage.size, w, h);
+    //         return nullptr;
+    //     }
+    // }
 
-    if (!output->cursor_swapchain || Vector2D{w, h} != Vector2D{output->cursor_swapchain->width, output->cursor_swapchain->height}) {
-        wlr_drm_format fmt = {0};
-        if (!output_pick_cursor_format(output, &fmt)) {
-            Debug::log(TRACE, "Failed to pick cursor format");
-            return nullptr;
-        }
+    // if (w <= 0 || h <= 0) {
+    //     Debug::log(TRACE, "hw cursor for output {} failed the size checks ({}x{} is invalid)", state->monitor->szName, w, h);
+    //     return nullptr;
+    // }
 
-        wlr_swapchain_destroy(output->cursor_swapchain);
-        output->cursor_swapchain = wlr_swapchain_create(output->allocator, w, h, &fmt);
-        wlr_drm_format_finish(&fmt);
+    // if (!output->cursor_swapchain || Vector2D{w, h} != Vector2D{output->cursor_swapchain->width, output->cursor_swapchain->height}) {
+    //     wlr_drm_format fmt = {0};
+    //     if (!output_pick_cursor_format(output, &fmt)) {
+    //         Debug::log(TRACE, "Failed to pick cursor format");
+    //         return nullptr;
+    //     }
 
-        if (!output->cursor_swapchain) {
-            Debug::log(TRACE, "Failed to create cursor swapchain");
-            return nullptr;
-        }
-    }
+    //     wlr_swapchain_destroy(output->cursor_swapchain);
+    //     output->cursor_swapchain = wlr_swapchain_create(output->allocator, w, h, &fmt);
+    //     wlr_drm_format_finish(&fmt);
 
-    wlr_buffer* buf = wlr_swapchain_acquire(output->cursor_swapchain, nullptr);
-    if (!buf) {
-        Debug::log(TRACE, "Failed to acquire a buffer from the cursor swapchain");
-        return nullptr;
-    }
+    //     if (!output->cursor_swapchain) {
+    //         Debug::log(TRACE, "Failed to create cursor swapchain");
+    //         return nullptr;
+    //     }
+    // }
 
-    CRegion damage = {0, 0, INT16_MAX, INT16_MAX};
+    // wlr_buffer* buf = wlr_swapchain_acquire(output->cursor_swapchain, nullptr);
+    // if (!buf) {
+    //     Debug::log(TRACE, "Failed to acquire a buffer from the cursor swapchain");
+    //     return nullptr;
+    // }
 
-    g_pHyprRenderer->makeEGLCurrent();
-    g_pHyprOpenGL->m_RenderData.pMonitor = state->monitor.get(); // has to be set cuz allocs
+    // CRegion damage = {0, 0, INT16_MAX, INT16_MAX};
 
-    const auto RBO = g_pHyprRenderer->getOrCreateRenderbuffer(buf, DRM_FORMAT_ARGB8888);
-    RBO->bind();
+    // g_pHyprRenderer->makeEGLCurrent();
+    // g_pHyprOpenGL->m_RenderData.pMonitor = state->monitor.get(); // has to be set cuz allocs
 
-    g_pHyprOpenGL->beginSimple(state->monitor.get(), damage, RBO);
-    g_pHyprOpenGL->clear(CColor{0.F, 0.F, 0.F, 0.F});
+    // const auto RBO = g_pHyprRenderer->getOrCreateRenderbuffer(buf, DRM_FORMAT_ARGB8888);
+    // RBO->bind();
 
-    CBox xbox = {{}, Vector2D{currentCursorImage.size / currentCursorImage.scale * state->monitor->scale}.round()};
-    Debug::log(TRACE, "[pointer] monitor: {}, size: {}, hw buf: {}, scale: {:.2f}, monscale: {:.2f}, xbox: {}", state->monitor->szName, currentCursorImage.size, Vector2D{w, h},
-               currentCursorImage.scale, state->monitor->scale, xbox.size());
+    // g_pHyprOpenGL->beginSimple(state->monitor.get(), damage, RBO);
+    // g_pHyprOpenGL->clear(CColor{0.F, 0.F, 0.F, 0.F});
 
-    g_pHyprOpenGL->renderTexture(texture, &xbox, 1.F);
+    // CBox xbox = {{}, Vector2D{currentCursorImage.size / currentCursorImage.scale * state->monitor->scale}.round()};
+    // Debug::log(TRACE, "[pointer] monitor: {}, size: {}, hw buf: {}, scale: {:.2f}, monscale: {:.2f}, xbox: {}", state->monitor->szName, currentCursorImage.size, Vector2D{w, h},
+    //            currentCursorImage.scale, state->monitor->scale, xbox.size());
 
-    g_pHyprOpenGL->end();
-    glFlush();
-    g_pHyprOpenGL->m_RenderData.pMonitor = nullptr;
+    // g_pHyprOpenGL->renderTexture(texture, &xbox, 1.F);
 
-    g_pHyprRenderer->onRenderbufferDestroy(RBO);
+    // g_pHyprOpenGL->end();
+    // glFlush();
+    // g_pHyprOpenGL->m_RenderData.pMonitor = nullptr;
 
-    wlr_buffer_unlock(buf);
+    // g_pHyprRenderer->onRenderbufferDestroy(RBO);
 
-    return buf;
+    // wlr_buffer_unlock(buf);
+
+    // return buf;
 }
 
 void CPointerManager::renderSoftwareCursorsFor(SP<CMonitor> pMonitor, timespec* now, CRegion& damage, std::optional<Vector2D> overridePos) {
@@ -591,12 +604,14 @@ Vector2D CPointerManager::getCursorPosForMonitor(SP<CMonitor> pMonitor) {
 }
 
 Vector2D CPointerManager::transformedHotspot(SP<CMonitor> pMonitor) {
-    if (!pMonitor->output->cursor_swapchain)
-        return {}; // doesn't matter, we have no hw cursor, and this is only for hw cursors
+    return {};
+    // TODO:
+    // if (!pMonitor->output->cursor_swapchain)
+    //     return {}; // doesn't matter, we have no hw cursor, and this is only for hw cursors
 
-    return CBox{currentCursorImage.hotspot * pMonitor->scale, {0, 0}}
-        .transform(wlTransformToHyprutils(wlr_output_transform_invert(pMonitor->transform)), pMonitor->output->cursor_swapchain->width, pMonitor->output->cursor_swapchain->height)
-        .pos();
+   // return CBox{currentCursorImage.hotspot * pMonitor->scale, {0, 0}}
+   //     .transform(wlTransformToHyprutils(wlr_output_transform_invert(pMonitor->transform)), pMonitor->output->cursor_swapchain->width, pMonitor->output->cursor_swapchain->height)
+    //    .pos();
 }
 
 CBox CPointerManager::getCursorBoxLogicalForMonitor(SP<CMonitor> pMonitor) {
@@ -796,9 +811,12 @@ SP<CTexture> CPointerManager::getCurrentCursorTexture() {
     if (!currentCursorImage.pBuffer && (!currentCursorImage.surface || !currentCursorImage.surface->resource()->current.buffer))
         return nullptr;
 
+    // TODO::
+    return nullptr;
+
     if (currentCursorImage.pBuffer) {
         if (!currentCursorImage.pBufferTexture) {
-            currentCursorImage.pBufferTexture = wlr_texture_from_buffer(g_pCompositor->m_sWLRRenderer, currentCursorImage.pBuffer);
+            //currentCursorImage.pBufferTexture = wlr_texture_from_buffer(g_pCompositor->m_sWLRRenderer, currentCursorImage.pBuffer);
             currentCursorImage.bufferTex      = makeShared<CTexture>(currentCursorImage.pBufferTexture);
         }
         return currentCursorImage.bufferTex;

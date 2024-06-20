@@ -785,7 +785,7 @@ bool CKeybindManager::handleVT(xkb_keysym_t keysym) {
     // beyond this point, return true to not handle anything else.
     // we'll avoid printing shit to active windows.
 
-    if (g_pCompositor->m_sWLRSession) {
+    if (g_pCompositor->m_pAqBackend->hasSession()) {
         const unsigned int TTY = keysym - XKB_KEY_XF86Switch_VT_1 + 1;
 
         // vtnr is bugged for some reason.
@@ -809,8 +809,9 @@ bool CKeybindManager::handleVT(xkb_keysym_t keysym) {
 
         Debug::log(LOG, "Switching from VT {} to VT {}", ttynum, TTY);
 
-        if (!wlr_session_change_vt(g_pCompositor->m_sWLRSession, TTY))
-            return true; // probably same session
+        // FIXME:
+        // if (!wlr_session_change_vt(g_pCompositor->m_sWLRSession, TTY))
+        //     return true; // probably same session
 
         g_pCompositor->m_bSessionActive = false;
 
@@ -2273,7 +2274,7 @@ void CKeybindManager::dpms(std::string arg) {
         if (!port.empty() && m->szName != port)
             continue;
 
-        wlr_output_state_set_enabled(m->state.wlr(), enable);
+        m->output->state->enabled = enable;
 
         m->dpmsStatus = enable;
 

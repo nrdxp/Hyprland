@@ -189,7 +189,7 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
 
     bool skipFrameSchedule = PMONITOR->shouldSkipScheduleFrameOnMouseEvent();
 
-    if (!PMONITOR->solitaryClient.lock() && g_pHyprRenderer->shouldRenderCursor() && PMONITOR->output->software_cursor_locks > 0 && !skipFrameSchedule)
+    if (!PMONITOR->solitaryClient.lock() && g_pHyprRenderer->shouldRenderCursor() && g_pPointerManager->softwareLockedFor(PMONITOR->self.lock()) && !skipFrameSchedule)
         g_pCompositor->scheduleFrameForMonitor(PMONITOR);
 
     PHLWINDOW forcedFocus = m_pForcedFocus.lock();
@@ -372,7 +372,7 @@ void CInputManager::mouseMoveUnified(uint32_t time, bool refocus) {
         foundSurface =
             g_pCompositor->vectorToLayerSurface(mouseCoords, &PMONITOR->m_aLayerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND], &surfaceCoords, &pFoundLayerSurface);
 
-    if (g_pCompositor->m_pLastMonitor->output->software_cursor_locks > 0 && !skipFrameSchedule)
+    if (g_pPointerManager->softwareLockedFor(PMONITOR->self.lock()) > 0 && !skipFrameSchedule)
         g_pCompositor->scheduleFrameForMonitor(g_pCompositor->m_pLastMonitor.get());
 
     // grabs

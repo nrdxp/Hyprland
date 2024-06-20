@@ -1,9 +1,9 @@
 #pragma once
 
 #include "../defines.hpp"
+#include <aquamarine/buffer/Buffer.hpp>
 
-class IWLBuffer;
-struct SDMABUFAttrs;
+class IHLBuffer;
 HYPRUTILS_FORWARD(Math, CRegion);
 
 enum TEXTURETYPE {
@@ -26,7 +26,7 @@ class CTexture {
     CTexture(wlr_texture*);
 
     // this ctor takes ownership of the eglImage.
-    CTexture(const SDMABUFAttrs&, void* image);
+    CTexture(const Aquamarine::SDMABUFAttrs&, void* image);
     ~CTexture();
 
     void        destroyTexture();
